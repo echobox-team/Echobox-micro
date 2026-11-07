@@ -1,0 +1,190 @@
+# =====================================================================
+# Amazon EKS / Kubernetes - Deployments + Services ClusterIP
+# Inclui 3 réplicas no ms-feedback e 2 réplicas no ms-company para
+# demonstrar Escalabilidade Horizontal e Balanceamento de Carga.
+# =====================================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-auth
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ms-auth
+  template:
+    metadata:
+      labels:
+        app: ms-auth
+    spec:
+      containers:
+        - name: ms-auth
+          image: lucaszanlorenzi/ms-auth:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8081
+          env:
+            - name: DB_HOST
+              value: "postgres-auth"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "echobox_auth"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              value: "admin"
+            - name: SPRINGDOC_SWAGGER_UI_URL
+              value: "/ms-auth/api-docs"
+            - name: SPRINGDOC_SWAGGER_UI_CONFIG_URL
+              value: "/ms-auth/api-docs/swagger-config"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-auth
+spec:
+  selector:
+    app: ms-auth
+  ports:
+    - port: 8081
+      targetPort: 8081
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-company
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: ms-company
+  template:
+    metadata:
+      labels:
+        app: ms-company
+    spec:
+      containers:
+        - name: ms-company
+          image: lucaszanlorenzi/ms-company:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8082
+          env:
+            - name: DB_HOST
+              value: "postgres-company"
+            - name: DB_PORT
+              value: "5432"
+            - name: DB_NAME
+              value: "echobox_company"
+            - name: DB_USER
+              value: "postgres"
+            - name: DB_PASSWORD
+              value: "admin"
+            - name: SPRINGDOC_SWAGGER_UI_URL
+              value: "/ms-company/api-docs"
+            - name: SPRINGDOC_SWAGGER_UI_CONFIG_URL
+              value: "/ms-company/api-docs/swagger-config"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-company
+spec:
+  selector:
+    app: ms-company
+  ports:
+    - port: 8082
+      targetPort: 8082
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-feedback
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: ms-feedback
+  template:
+    metadata:
+      labels:
+        app: ms-feedback
+    spec:
+      containers:
+        - name: ms-feedback
+          image: lucaszanlorenzi/ms-feedback:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8083
+          env:
+            - name: MONGO_HOST
+              value: "mongo-feedback"
+            - name: MONGO_PORT
+              value: "27017"
+            - name: RABBITMQ_HOST
+              value: "rabbitmq"
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: MS_COMPANY_URL
+              value: "http://ms-company:8082"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-feedback
+spec:
+  selector:
+    app: ms-feedback
+  ports:
+    - port: 8083
+      targetPort: 8083
+  type: ClusterIP
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-notification
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ms-notification
+  template:
+    metadata:
+      labels:
+        app: ms-notification
+    spec:
+      containers:
+        - name: ms-notification
+          image: lucaszanlorenzi/ms-notification:1.0.0
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8084
+          env:
+            - name: RABBITMQ_HOST
+              value: "rabbitmq"
+            - name: RABBITMQ_PORT
+              value: "5672"
+            - name: MAIL_HOST
+              value: "mailhog"
+            - name: MAIL_PORT
+              value: "1025"
+            - name: SPRINGDOC_SWAGGER_UI_URL
+              value: "/ms-notification/api-docs"
+            - name: SPRINGDOC_SWAGGER_UI_CONFIG_URL
+              value: "/ms-notification/api-docs/swagger-config"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: ms-notification
+spec:
+  selector:
+    app: ms-notification
+  ports:
+    - port: 8084
+      targetPort: 8084
+  type: ClusterIP

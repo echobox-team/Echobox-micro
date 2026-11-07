@@ -1,0 +1,184 @@
+services:
+  # =====================================================================
+  # NGINX GATEWAY / INGRESS LOCAL (Espelhando o NGINX Ingress do EKS)
+  # Roteia todas as chamadas na porta 8080 para o microsservico correto
+  # =====================================================================
+  nginx-ingress:
+    image: nginx:alpine
+    container_name: echobox-nginx-ingress
+    ports:
+      - "8080:8080"   # Porta unica de entrada (Ingress)
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - ms-auth
+      - ms-company
+      - ms-feedback
+      - ms-notification
+    networks:
+      - echobox-net
+
+  # =====================================================================
+  # BANCOS DE DADOS DISTINTOS (Database per Service: PostgreSQL + MongoDB)
+  # =====================================================================
+  postgres-auth:
+    image: postgres:16-alpine
+    container_name: postgres-auth
+    environment:
+      POSTGRES_DB: echobox_auth
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+    ports:
+      - "5433:5432"
+    networks:
+      - echobox-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d echobox_auth"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  postgres-company:
+    image: postgres:16-alpine
+    container_name: postgres-company
+    environment:
+      POSTGRES_DB: echobox_company
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: admin
+    ports:
+      - "5434:5432"
+    networks:
+      - echobox-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d echobox_company"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mongo-feedback:
+    image: mongo:7
+    container_name: mongo-feedback
+    ports:
+      - "27017:27017"
+    networks:
+      - echobox-net
+
+  # =====================================================================
+  # MENSAGERIA E SUPORTE DE E-MAIL (RabbitMQ + MailHog)
+  # =====================================================================
+  rabbitmq:
+    image: rabbitmq:3-management-alpine
+    container_name: rabbitmq
+    ports:
+      - "5672:5672"
+      - "15672:15672" # Painel Web RabbitMQ (guest / guest)
+    networks:
+      - echobox-net
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  mailhog:
+    image: mailhog/mailhog:latest
+    container_name: mailhog
+    ports:
+      - "1025:1025" # Porta SMTP
+      - "8025:8025" # Caixa de Entrada Web (http://localhost:8025)
+    networks:
+      - echobox-net
+
+  # =====================================================================
+  # 1. MICROSSERVICO DE AUTENTICACAO E USUARIOS (Java / Spring Boot + SQL)
+  # =====================================================================
+  ms-auth:
+    build: ./ms-auth
+    container_name: ms-auth
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8081
+      DB_HOST: postgres-auth
+      DB_PORT: 5432
+      DB_NAME: echobox_auth
+      DB_USER: postgres
+      DB_PASSWORD: admin
+      JWT_SECRET: mySecretKey123456789012345678901234567890123456789012345678901234567890
+    ports:
+      - "8081:8081"
+    networks:
+      - echobox-net
+
+  # =====================================================================
+  # 2. MICROSSERVICO DE EMPRESAS E CATALOGO (Java / Spring Boot + SQL)
+  # =====================================================================
+  ms-company:
+    build: ./ms-company
+    container_name: ms-company
+    depends_on:
+      postgres-company:
+        condition: service_healthy
+    environment:
+      SERVER_PORT: 8082
+      DB_HOST: postgres-company
+      DB_PORT: 5432
+      DB_NAME: echobox_company
+      DB_USER: postgres
+      DB_PASSWORD: admin
+      JWT_SECRET: mySecretKey123456789012345678901234567890123456789012345678901234567890
+    ports:
+      - "8082:8082"
+    networks:
+      - echobox-net
+
+  # =====================================================================
+  # 3. MICROSSERVICO DE FEEDBACKS E REPLIES (Python / FastAPI + MongoDB)
+  # =====================================================================
+  ms-feedback:
+    build: ./ms-feedback
+    container_name: ms-feedback
+    depends_on:
+      - mongo-feedback
+      - rabbitmq
+    environment:
+      MONGO_HOST: mongo-feedback
+      MONGO_PORT: 27017
+      MONGO_DB: echobox_feedback
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_QUEUE: echobox.notifications
+      MS_COMPANY_URL: http://ms-company:8082
+      JWT_SECRET: mySecretKey123456789012345678901234567890123456789012345678901234567890
+    ports:
+      - "8083:8083"
+    networks:
+      - echobox-net
+
+  # =====================================================================
+  # 4. MICROSSERVICO DE SUPORTE DE E-MAIL (Java / Spring Boot + RabbitMQ)
+  # =====================================================================
+  ms-notification:
+    build: ./ms-notification
+    container_name: ms-notification
+    depends_on:
+      rabbitmq:
+        condition: service_healthy
+      mailhog:
+        condition: service_started
+    environment:
+      SERVER_PORT: 8084
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_QUEUE: echobox.notifications
+      MAIL_HOST: mailhog
+      MAIL_PORT: 1025
+    ports:
+      - "8084:8084"
+    networks:
+      - echobox-net
+
+networks:
+  echobox-net:
+    driver: bridge

@@ -1,0 +1,119 @@
+# =====================================================================
+# Amazon EKS / Kubernetes - NGINX Ingress Controller
+# 1. echobox-ingress: Roteia as APIs REST (/users, /companies, etc.)
+# 2. echobox-swagger-ingress: Expõe o Swagger UI individual de cada um
+#    dos 4 microsserviços + MailHog Web UI na mesma URL do Ingress!
+# =====================================================================
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: echobox-ingress
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /users
+            pathType: Prefix
+            backend:
+              service:
+                name: ms-auth
+                port:
+                  number: 8081
+          - path: /companies
+            pathType: Prefix
+            backend:
+              service:
+                name: ms-company
+                port:
+                  number: 8082
+          - path: /categories
+            pathType: Prefix
+            backend:
+              service:
+                name: ms-company
+                port:
+                  number: 8082
+          - path: /statuses
+            pathType: Prefix
+            backend:
+              service:
+                name: ms-company
+                port:
+                  number: 8082
+          - path: /feedbacks
+            pathType: Prefix
+            backend:
+              service:
+                name: ms-feedback
+                port:
+                  number: 8083
+          - path: /replies
+            pathType: Prefix
+            backend:
+              service:
+                name: ms-feedback
+                port:
+                  number: 8083
+          - path: /api-docs
+            pathType: Prefix
+            backend:
+              service:
+                name: ms-feedback
+                port:
+                  number: 8083
+          - path: /notifications
+            pathType: Prefix
+            backend:
+              service:
+                name: ms-notification
+                port:
+                  number: 8084
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: echobox-swagger-ingress
+  annotations:
+    nginx.ingress.kubernetes.io/use-regex: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
+spec:
+  ingressClassName: nginx
+  rules:
+    - http:
+        paths:
+          - path: /ms-auth(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ms-auth
+                port:
+                  number: 8081
+          - path: /ms-company(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ms-company
+                port:
+                  number: 8082
+          - path: /ms-feedback(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ms-feedback
+                port:
+                  number: 8083
+          - path: /ms-notification(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: ms-notification
+                port:
+                  number: 8084
+          - path: /mailhog(/|$)(.*)
+            pathType: ImplementationSpecific
+            backend:
+              service:
+                name: mailhog
+                port:
+                  number: 8025
